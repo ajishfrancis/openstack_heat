@@ -1,0 +1,20 @@
+#/ ALEPO_FILE_VERSION=1.0
+#############################################################
+# Alepo : Configure AAA DB VNF
+# Owner     - SI
+# Date      - 03-June-2019
+# Description - Heat Template ENV file to launch the ALEPO AAA DB VNF
+# Last Updated on - 06-June-2019
+# 
+############################################################
+
+
+
+parameters:
+  network-name: provider
+  Key_Pair: Alepo-Dialog-Local-OS
+  flavor: m4.xlarge
+  DB_imageID: 7080c036-dad5-45f9-bf05-a1dfceac9ab2
+  DB_HOST: alepomariadb
+ 
+    

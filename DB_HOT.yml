@@ -1,0 +1,103 @@
+
+#/ ALEPO_FILE_VERSION=1.0
+#############################################################
+# Alepo : Configure AAA DB VNF
+# Owner     - SI
+# Date      - 03-June-2019
+# Description - Heat Template to launch the ALEPO AAA DB VNF
+# Last Updated on - 06-June-2019
+# 
+############################################################
+
+
+
+heat_template_version: "2014-10-16"
+description: "version 2017-09-01 created by HOT Generator at Mon, 31 May 2019 06:10:14 GMT."
+
+parameters:
+  network-name:
+    type: string
+    description: Name of the network
+    default: provider
+  Key_Pair:
+    type: string
+    description: pass the key name  
+  flavor:
+     type: string
+     description: provide the flavor         
+  DB_imageID:
+    type: string
+    description: pass the database image id 
+  DB_HOST:
+    type: string
+    description: pass the hostname for aaa 
+    default: dbtest    
+
+
+resources: 
+  DB: 
+    type: "OS::Nova::Server"
+    properties: 
+      security_groups: 
+        - "default"
+      networks: 
+        - network: { get_param: network-name }
+      name: DBServer
+      flavor: { get_param: flavor }
+      image: { get_param: DB_imageID }
+      availability_zone: nova
+      key_name: { get_param: Key_Pair }
+      user_data:
+        str_replace:
+          params:
+            db_host: { get_param: DB_HOST }             
+          template: |
+            #!/bin/bash
+            ### Configuration Script######
+            StartTime=`date +"%d-%m-%Y_%H-%M-%S"`
+            LOG_FILE="/tmp/DB_NODE_CONFIG_${StartTime}"
+            touch $LOG_FILE
+            chmod 0777 $LOG_FILE
+            timestamp() {
+            date +"%d-%m-%Y %H:%M:%S :"
+            }
+            echo "`timestamp` Reading conf file" >> $LOG_FILE
+            
+            echo "######################################################################" >> $LOG_FILE
+            echo " " >> $LOG_FILE
+            IP=`hostname -I`
+            DB_HOST=db_host
+            echo "Ip address of server is `hostname -I`" >> $LOG_FILE
+            echo "`timestamp` Configuring hosts file" >> $LOG_FILE
+            echo "`timestamp` Old hosts file : " >> $LOG_FILE
+            cat /etc/hosts	>> $LOG_FILE
+            echo "127.0.0.1 localhost localhost.localdomain localhost4 localhost4.localdomain4" | tee /etc/hosts > /dev/null
+            echo "::1       localhost localhost.localdomain localhost6 localhost6.localdomain6" | tee --append /etc/hosts > /dev/null
+            echo "$IP $DB_HOST " | tee --append /etc/hosts > /dev/null
+            echo "######################################################################" >> $LOG_FILE
+            
+            # Firewall Rules
+            echo "`timestamp` Adding required firewall rules." >> $LOG_FILE
+                  firewall-cmd --zone=public --permanent --add-service=snmp --add-service=snmptrap |& tee -a $LOG_FILE
+                  firewall-cmd --zone=public --permanent --add-port=3306/tcp --add-port=2003/tcp --add-port=5665/tcp |& tee -a $LOG_FILE
+                  firewall-cmd --reload  |& tee -a $LOG_FILE
+                  
+           
+            ### start mariadb service                  
+            service mysql start 
+                   
+            
+      
+      
+      
+      
+outputs:
+  instance_name:
+    description: Name of the instances.
+    value: 
+      - { get_attr: [ DB, name ] }
+  instance_ip:
+    description: IP address of the instance.
+    value: 
+      - { get_attr: [ DB, first_address ] }
+      

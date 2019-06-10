@@ -1,0 +1,229 @@
+﻿
+#/ ALEPO_FILE_VERSION=1.0
+#############################################################
+# Alepo : Deploy AAA,AAA-EMS VNF
+# Owner     - SI
+# Date      - 03-June-2019
+# Description - Heat Template to launch the ALEPO AAA AAA-EMS VNF
+# Last Updated on - 06-June-2019
+# 
+############################################################
+
+
+
+
+heat_template_version: "2014-10-16"
+description: "version 2017-09-01 created by HOT Generator at Mon, 31 May 2019 06:10:14 GMT."
+
+parameters:
+  network-name:
+    type: string
+    description: Name of the network
+    default: provider
+  Key_Pair:
+    type: string
+    description: pass the key name  
+  flavor:
+     type: string
+     description: provide the flavor         
+  AAA_imageID:
+    type: string
+    description: pass the AAA image id
+  AAAEMS_imageID:
+    type: string
+    description: pass the AAAEMS image id  
+  DB_IP:
+    type: string
+    description: pass the databaseip
+  DB_AAA_User:
+    type: string
+    description: pass the database User for aaaems
+  DB_AAA_Password:
+    type: string
+    description: pass the database Password for aaa
+    hidden: true
+  DB_AAAEMS_User:
+    type: string
+    description: pass the database User for aaaems
+  DB_AAAEMS_Password:
+    type: string
+    description: pass the database Password for aaaems
+    hidden: true  
+  AAA_HOST:
+    type: string
+    description: pass the hostname for aaa 
+    default: aaa-test    
+  AAAEMS_HOST:
+    type: string
+    description: pass the hostname for aaaems 
+    default: alepoaaa1.alepo.com
+
+
+resources: 
+  AAA: 
+    type: "OS::Nova::Server"
+    properties: 
+      security_groups: 
+        - "default"
+      networks: 
+        - network: { get_param: network-name }
+      name: AAAserver
+      flavor: { get_param: flavor }
+      image: { get_param: AAA_imageID }
+      availability_zone: nova
+      key_name: { get_param: Key_Pair }
+      user_data:
+        str_replace:
+          params:
+            db_ip: { get_param: DB_IP } 
+            db_user: { get_param: DB_AAA_User }
+            db_password: { get_param: DB_AAA_Password }   
+            aaa_host: { get_param: AAA_HOST }             
+          template: |
+            #!/bin/bash
+            ### Configuration Script######
+            StartTime=`date +"%d-%m-%Y_%H-%M-%S"`
+            LOG_FILE="/tmp/AAA_NODE_CONFIG_${StartTime}"
+            AAA_HOME="/home/alepo/alepoaaa"
+            AAA_CONFG="$AAA_HOME/server.conf"
+            touch $LOG_FILE
+            chmod 0777 $LOG_FILE
+            timestamp() {
+            date +"%d-%m-%Y %H:%M:%S :"
+            }
+            echo "`timestamp` Reading conf file" >> $LOG_FILE
+            
+            echo "######################################################################" >> $LOG_FILE
+            echo " " >> $LOG_FILE
+            IP=`hostname -I`
+            AAA_HOST=aaa_host
+            echo "Ip address of server is `hostname -I`" >> $LOG_FILE
+            echo "`timestamp` Configuring hosts file" >> $LOG_FILE
+            echo "`timestamp` Old hosts file : " >> $LOG_FILE
+            cat /etc/hosts	>> $LOG_FILE
+            echo "127.0.0.1 localhost localhost.localdomain localhost4 localhost4.localdomain4" | tee /etc/hosts > /dev/null
+            echo "::1       localhost localhost.localdomain localhost6 localhost6.localdomain6" | tee --append /etc/hosts > /dev/null
+            echo "$IP $AAA_HOST " | tee --append /etc/hosts > /dev/null
+            echo "######################################################################" >> $LOG_FILE
+            
+            # Firewall Rules
+            echo "`timestamp` Adding required firewall rules." >> $LOG_FILE
+                  firewall-cmd --zone=public --permanent --add-service=snmp --add-service=snmptrap |& tee -a $LOG_FILE
+                  firewall-cmd --zone=public --permanent --add-port=873/tcp --add-port=2003/tcp --add-port=5665/tcp --add-port=9001/tcp --add-port=9002/tcp --add-port=10705/tcp |& tee -a $LOG_FILE
+                  firewall-cmd --zone=public --permanent --add-port=1812/udp --add-port=1813/udp --add-port=2012/udp --add-port=2013/udp --add-port=8003/tcp --add-port=8008/tcp |& tee -a $LOG_FILE
+                  firewall-cmd --reload  |& tee -a $LOG_FILE
+                  
+            sed -i -e "s/^SERVERIP=.*/SERVERIP=$IP/" /home/alepo/alp-scripts/alepoalert.conf
+            sed -i -e "s/^SERVERIP=.*/SERVERIP=$IP/" /home/alepo/alp-scripts/aaa/alepoalert.conf
+            sed -i -e "s/^AAASERVERIP=.*/AAASERVERIP=$IP/" /home/alepo/alp-scripts/aaa/alepoalert.conf
+            ##sed -i -e "s/^ConnectStr=[0-9.]*\(.*\)/ConnectStr=db_ip\1/" $AAA_CONFG
+            sed -i -e "s/^ConnectStr=.*/ConnectStr=db_ip;db_user;db_password;alepoaaadb;1/" ${AAA_CONFG}
+            
+            ###setting the permission
+            chown -R alepo:alepo /home/alepo/
+            
+            #### start aaa #######
+            su -l alepo -c "$AAA_HOME/alepoaaa start" >>$LOG_FILE             
+            
+
+  AAAEMS: 
+    type: "OS::Nova::Server"
+    properties: 
+      security_groups: 
+        - "default"
+      networks: 
+        - network: { get_param: network-name }
+      name: AAAEMS
+      flavor: { get_param: flavor }
+      image: { get_param: AAAEMS_imageID }
+      availability_zone: nova
+      key_name: { get_param: Key_Pair }
+      user_data:
+        str_replace:
+          params:
+            db_ip: { get_param: DB_IP } 
+            db_user: { get_param: DB_AAAEMS_User }
+            db_password: { get_param: DB_AAAEMS_Password }
+            aaaems_host: { get_param: AAAEMS_HOST }            
+          template: |
+            #!/bin/bash
+            ### Configuration Script######
+            StartTime=`date +"%d-%m-%Y_%H-%M-%S"`
+            LOG_FILE="/tmp/EMS_NODE_CONFIG_${StartTime}"
+            EMS_HOME="/home/alepo/alepoaaaems/liferay-portal-5.2.3/tomcat-5.5.35/"
+            EMS_CONFG="$EMS_HOME/webapps/ROOT/WEB-INF/classes/portal-ext.properties"
+            touch $LOG_FILE
+            chmod 0777 $LOG_FILE
+            IP=`hostname -I`
+            DB_IP=db_ip
+            AAAEMS_HOST=aaaems_host
+            echo "Ip address of server is `hostname -I`" >> $LOG_FILE
+            timestamp() {
+            date +"%d-%m-%Y %H:%M:%S :"
+            }
+            echo "`timestamp` Reading conf file" >> $LOG_FILE
+            echo "`timestamp` Configuring hosts file" >> $LOG_FILE
+            echo "`timestamp` Old hosts file : " >> $LOG_FILE
+            cat /etc/hosts	>> $LOG_FILE
+            echo "127.0.0.1  localhost localhost.localdomain localhost4 localhost4.localdomain4" | tee /etc/hosts > /dev/null
+            echo "::1        localhost localhost.localdomain localhost6 localhost6.localdomain6" | tee --append /etc/hosts > /dev/null
+            echo "$IP $AAAEMS_HOST " | tee --append /etc/hosts > /dev/null
+            echo "######################################################################" >> $LOG_FILE
+            echo " " >> $LOG_FILE
+            echo "`timestamp` Configuring portal-ext.properties" >> $LOG_FILE
+            
+             sed -i "s/[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}:3306/$DB_IP:3306/" ${EMS_CONFG}   
+             
+             sed -i -e "s/aaadb2/alepoaaadb/g" ${EMS_CONFG}
+             
+             sed -i -e "s/^jdbc.default.username=.*/jdbc.default.username=db_user/g" ${EMS_CONFG}
+             sed -i -e "s/^jdbc.default.password=.*/jdbc.default.password=db_password/g" ${EMS_CONFG}
+             
+             
+             sed -i -e "s/^jdbc.read.username=.*/jdbc.read.username=db_user/g" ${EMS_CONFG}
+             sed -i -e "s/^jdbc.read.password=.*/jdbc.read.password=db_password/g" ${EMS_CONFG}
+             
+             
+             sed -i -e "s/^jdbc.write.username=.*/jdbc.write.username=db_user/g" ${EMS_CONFG}
+             sed -i -e "s/^jdbc.write.password=.*/jdbc.write.password=db_password/g" ${EMS_CONFG}
+             
+             
+             sed -i -e "s/^jdbc.secondary.username=.*/jdbc.secondary.username=db_user/g" ${EMS_CONFG}
+             sed -i -e "s/^jdbc.secondary.password=.*/jdbc.secondary.password=db_password/g" ${EMS_CONFG}
+             
+             
+             sed -i -e "s/^SERVERIP=.*/SERVERIP=$IP/" /home/alepo/alp-scripts/alepoalert.conf
+             echo "`timestamp` Configuring logs location" >> $LOG_FILE
+            
+            
+             echo "######################################################################" >> $LOG_FILE
+             echo " " >> $LOG_FILE
+             echo "`timestamp` Adding required firewall rules." >> $LOG_FILE
+             ## firewall-cmd --zone=public --permanent --add-service=snmp --add-service=snmptrap |& tee -a $LOG_FILE 
+             ## firewall-cmd --zone=public --permanent --add-port=873/tcp --add-port=2003/tcp --add-port=5665/tcp --add-port=9001/tcp --add-port=9002/tcp |& tee -a $LOG_FILE
+             ## firewall-cmd --zone=public --permanent --add-port=8004-8005/tcp --add-port=8080/tcp --add-port=8443/tcp |& tee -a $LOG_FILE
+             ## firewall-cmd --reload  |& tee -a $LOG_FILE
+             echo "######################################################################" >> $LOG_FILE
+             echo " " >> $LOG_FILE
+             . /etc/profile
+             
+             chmod +x /etc/rc.local
+             
+
+    depends_on: 
+      - AAA    
+      
+           
+      
+outputs:
+  instance_name:
+    description: Name of the instances.
+    value: 
+      - { get_attr: [ AAA, name ] }
+      - { get_attr: [ AAAEMS, name ] }
+  instance_ip:
+    description: IP address of the instance.
+    value: 
+      - { get_attr: [ AAA, first_address ] }
+      - { get_attr: [ AAAEMS, first_address ] }      
+    

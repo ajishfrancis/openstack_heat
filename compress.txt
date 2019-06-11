@@ -1,0 +1,24 @@
+source etisalat-openrc
+# nova image-create INSTANCE_NAME SNAPSHOT_NAME
+nova image-create aaa-1 Alepo_AAA_11_0_Dialog_7_Jun_2019_Snapshot
+ 
+ 
+#Download snapshot loaclly
+# glance image-download  SNAPSHOT_IMAGE_ID --file IMAGE_NAME.qcow2  --progress
+glance image-download 687b4d5d-078d-4231-abe5-7161f60606be --file Alepo_AAA_11_0_Dialog_7_Jun_2019_Snapshot.qcow2 --progress
+ 
+ 
+# Check Size of actual disk and occupied by the image, now we want to shrunk image size
+qemu-img info Alepo_AAA_11_0_Dialog_7_Jun_2019_Snapshot.qcow2
+ 
+ 
+### USE virt-sparsify http://libguestfs.org/virt-sparsify.1.html
+# virt-sparsify Original.qcow2 sparsed.qcow2
+sudo virt-sparsify Alepo_AAA_11_0_Dialog_7_Jun_2019_Snapshot.qcow2 Alepo_AAA_11_0_Dialog_7_Jun_2019_Sparsed.qcow2
+ 
+ 
+# Upload shrunk/sparsed image to Glance and test it by launching instance with this
+glance image-create --name Alepo_AAA_11_0_Dialog_7_Jun_2019_Sparsed --disk-format qcow2 --container-format bare --file Alepo_AAA_11_0_Dialog_7_Jun_2019_Sparsed.qcow2 --progress
+ 
+ 
+#After successfull test of sparsed image remove downloaded snapshot from controller node, delete from glance and keep Sparsed/Shrunk in release FTP.
